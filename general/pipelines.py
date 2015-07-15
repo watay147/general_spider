@@ -5,7 +5,7 @@
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: http://doc.scrapy.org/en/latest/topics/item-pipeline.html
 import MySQLdb
-
+import time
 class DBPipeline(object):
     def open_spider(self, spider):
         self.testf=open('testf.txt','w')
@@ -18,6 +18,7 @@ class DBPipeline(object):
 			}
         self.conn = MySQLdb.Connect( user='root',  db='testdb',charset='utf8')
         self.cursor=self.conn.cursor() 
+        self.crawldate=time.strftime("%Y-%m-%d",time.localtime())
 
     def process_item(self, item, spider):
         if len(item)!=0:
@@ -32,9 +33,10 @@ class DBPipeline(object):
         print "finish!"
 
     def storeXMulItem(self,item):
-        itemlist=zip(item['Xtitle'],item['Xauthor'],item['Xreply'],item['Xclick'])
+        itemlist=zip(item['Xtitle'],item['Xarticleid'],item['Xreply'],item['Xclick'])
         for instance in itemlist:
-            self.cursor.execute("insert into lab (title,author,reply,click) value ('%s','%s',%s,%s)"% instance)
+            instance=instance+(self.crawldate,)
+            self.cursor.execute("insert into gubarticleupdate (title,articleid,reply,click,crawldate) value ('%s',%s,%s,%s,'%s')"% instance)
             self.conn.commit()
 
 

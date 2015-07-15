@@ -12,9 +12,10 @@ class XMulItem(scrapy.Item):
     # define the fields for your item here like:
     # name = scrapy.Field()
     Xtitle=scrapy.Field()
-    Xauthor=scrapy.Field()
+    Xarticleid=scrapy.Field()
     Xreply=scrapy.Field()
     Xclick=scrapy.Field()
+    Xstockno=scrapy.Field()
 
 class XSinItem(scrapy.Item):
     # define the fields for your item here like:

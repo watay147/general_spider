@@ -44,7 +44,7 @@ class GeneralSpider(scrapy.Spider):
     maxX=2#控制测试时爬取的X层页面数目。
     countX=0
     Xtitle="//div[@class='articleh']/span[3]/a"
-    Xauthor="//div[@class='articleh']/span[4]/*[1]"
+    Xarticleid="//div[@class='articleh']/span[3]/a/@href"
     Xreply="//div[@class='articleh']/span[2]"
     Xclick="//div[@class='articleh']/span[1]"
     Xnextlink="//span[@class='pagernums']/span/a[last()-1]"
@@ -60,7 +60,7 @@ class GeneralSpider(scrapy.Spider):
     ZcommentAuthor="//div[@class='zwlianame']/span/a"
     ZcommentDate="//div[@class='zwlitime']"
     ZcommentContent="//div[@class='zwlitx']/div/div[3]"
-
+    
 
 
     def __init__(self):
@@ -71,7 +71,7 @@ class GeneralSpider(scrapy.Spider):
     #每项的预处理函数字典
         self.funcDist={
         'Xtitle':self.extracttext,
-        'Xauthor':self.extracttext,
+        'Xarticleid':self.extracturlid,
         'Xreply':self.extractint,
         'Xclick':self.extractint,
         'Ycontent':self.extracttext,    
@@ -86,7 +86,7 @@ class GeneralSpider(scrapy.Spider):
     #每项的名称与对应xpath元组，名称将用于索引预处理函数和作为数据库的键值，由于是字典，所以各层的类似元素名称必须不一样，考虑到可能不希望数据库的键值带有X，后面pipepiles.py可以取[1:]部分
         self.XMulTarget=[
             ('Xtitle',self.Xtitle), 
-            ('Xauthor',self.Xauthor),
+            ('Xarticleid',self.Xarticleid),
             ('Xreply',self.Xreply),
             ('Xclick',self.Xclick)
         ]
@@ -141,6 +141,12 @@ class GeneralSpider(scrapy.Spider):
            if res:
                return res.group(0)
         return ""
+    #直接取出整数部分
+    def extracturlid(self,s):
+        res=re.search(r'\d+.html',s)
+        if res:
+            return res.group(0)[:-5]
+        return ""
         
 #######辅助函数#######
 
@@ -161,6 +167,7 @@ class GeneralSpider(scrapy.Spider):
                 print itemcontent
                 self.f.write(itemcontent.encode('utf8')+'\n')
                 self.f.flush()
+        Xmuls['Xstockno']=[self.extracturlid(response.url)]*len(Xmuls['Xtitle'])
         yield Xmuls
         #爬取X页的单重属性
         Xsin=XSinItem()
