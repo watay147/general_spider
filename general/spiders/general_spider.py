@@ -41,7 +41,7 @@ from general.items import ZSinItem
 class GeneralSpider(scrapy.Spider):
     name = 'general'
     start_urls = ['http://guba.eastmoney.com/list,000415.html']
-    maxX=2#控制测试时爬取的X层页面数目。
+    maxX=1#控制测试时爬取的X层页面数目。
     countX=0
     Xtitle="//div[@class='articleh']/span[3]/a"
     Xarticleid="//div[@class='articleh']/span[3]/a/@href"
@@ -50,8 +50,10 @@ class GeneralSpider(scrapy.Spider):
     Xnextlink="//span[@class='pagernums']/span/a[last()-1]"
     Ysource=Xtitle
     Ynextlink=""
-    Ycontent="//*[@id='zwconbody']/div"
+    Ytitle="//div[@id='zwconttbt']"
+    Ycontent="//div[@class='stockcodec']"
     Ydate="//div[@id='zwconttb']/div[2]"
+    Yauthor="//div[@id='zwconttbn']/strong/*"
     YcommentAuthor="//div[@class='zwlianame']/span/a"
     YcommentDate="//div[@class='zwlitime']"
     YcommentContent="//div[@class='zwlitx']/div/div[3]"
@@ -76,6 +78,8 @@ class GeneralSpider(scrapy.Spider):
         'Xclick':self.extractint,
         'Ycontent':self.extracttext,    
         'Ydate':self.extracttime,
+        'Ytitle':self.extracttext,
+        'Yauthor':self.extracttext,
         'YcommentAuthor':self.extracttext,
         'YcommentDate':self.extracttime,
         'YcommentContent':self.extracttext,
@@ -98,7 +102,9 @@ class GeneralSpider(scrapy.Spider):
             ]
         self.YSinTarget=[
             ('Ycontent',self.Ycontent),
-            ('Ydate',self.Ydate)
+            ('Ydate',self.Ydate),
+            ('Ytitle',self.Ytitle),
+            ('Yauthor',self.Yauthor)
         ]
         self.ZMulTarget=[
             ('ZcommentAuthor',self.ZcommentAuthor),
@@ -113,7 +119,7 @@ class GeneralSpider(scrapy.Spider):
 	
     #用于取出元素内部的文本内容
     def extracttext(self,s):
-        res=re.search(">.*<",s)
+        res=re.search(">.*<",s,re.DOTALL)
         if res:
             return res.group(0)[1:-1].strip()
         return ""
@@ -146,6 +152,11 @@ class GeneralSpider(scrapy.Spider):
         res=re.search(r'\d+.html',s)
         if res:
             return res.group(0)[:-5]
+        return ""
+    def extractstockno(self,s):
+        res=re.search(r',.+,',s)
+        if res:
+            return res.group(0)[1:-1]
         return ""
         
 #######辅助函数#######
@@ -208,11 +219,16 @@ class GeneralSpider(scrapy.Spider):
                 #print itemcontent
                 self.f.write(itemcontent.encode('utf8')+'\n')
                 self.f.flush()
+        Ysin=YSinItem()
         for name,target in self.YSinTarget:
             itemcontent=self.funcDist[name](response.xpath(target).extract()[0])
+            Ysin[name]=itemcontent
             #print itemcontent
             self.f.write(itemcontent.encode('utf8')+'\n')
             self.f.flush()
+        Ysin['Ystockno']=self.extractstockno(response.url)
+        Ysin['Yarticleid']=self.extracturlid(response.url)
+        yield Ysin
         #产生到Z页的链接
         if self.Zsource:
             for item in response.xpath(self.Zsource):

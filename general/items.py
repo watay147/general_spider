@@ -37,6 +37,10 @@ class YSinItem(scrapy.Item):
     # name = scrapy.Field()
     Ycontent=scrapy.Field()
     Ydate=scrapy.Field()
+    Ytitle=scrapy.Field()
+    Yauthor=scrapy.Field()
+    Ystockno=scrapy.Field()
+    Yarticleid=scrapy.Field()
     
 
 class ZMulItem(scrapy.Item):

@@ -8,7 +8,6 @@ import MySQLdb
 import time
 class DBPipeline(object):
     def open_spider(self, spider):
-        self.testf=open('testf.txt','w')
         self.storeFunc={'XMulItem':self.storeXMulItem,
 			'XSinItem':self.storeXSinItem,
 			'YMulItem':self.storeYMulItem,
@@ -26,7 +25,6 @@ class DBPipeline(object):
         return item
 
     def close_spider(self,spider):
-        self.testf.close()
         self.cursor.close()
         self.conn.close()
         spider.browser.close()
@@ -36,8 +34,8 @@ class DBPipeline(object):
         itemlist=zip(item['Xtitle'],item['Xarticleid'],item['Xstockno'],item['Xreply'],item['Xclick'])
         for instance in itemlist:
             instance=instance+(self.crawldate,)
-            self.cursor.execute("insert into gubarticleupdate (title,articleid,stockno,reply,click,crawldate) value ('%s',%s,'%s',%s,%s,'%s')"% instance)
-            self.conn.commit()
+            #self.cursor.execute("insert into gubarticleupdate (title,articleid,stockno,reply,click,crawldate) value ('%s',%s,'%s',%s,%s,'%s')"% instance)
+            #self.conn.commit()
 
 
 
@@ -46,10 +44,14 @@ class DBPipeline(object):
         pass
 
     def storeYMulItem(self,item):
+
         pass
 
     def storeYSinItem(self,item):
-        pass
+        instance=(item['Ytitle'],item['Yauthor'],item['Ystockno'],item['Ydate'],item['Ycontent'],item['Yarticleid'])
+        self.cursor.execute("insert ignore into article (title,author,stockno,time,content,articleid) value ('%s','%s','%s','%s','%s',%s)"% instance)#insert ignore会自动避免重复插入
+        self.conn.commit()
+        
 
     def storeZMulItem(self,item):
         pass
