@@ -33,10 +33,10 @@ class DBPipeline(object):
         print "finish!"
 
     def storeXMulItem(self,item):
-        itemlist=zip(item['Xtitle'],item['Xarticleid'],item['Xreply'],item['Xclick'])
+        itemlist=zip(item['Xtitle'],item['Xarticleid'],item['Xstockno'],item['Xreply'],item['Xclick'])
         for instance in itemlist:
             instance=instance+(self.crawldate,)
-            self.cursor.execute("insert into gubarticleupdate (title,articleid,reply,click,crawldate) value ('%s',%s,%s,%s,'%s')"% instance)
+            self.cursor.execute("insert into gubarticleupdate (title,articleid,stockno,reply,click,crawldate) value ('%s',%s,'%s',%s,%s,'%s')"% instance)
             self.conn.commit()
 
 
