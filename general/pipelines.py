@@ -7,6 +7,7 @@
 import MySQLdb
 import time
 class DBPipeline(object):
+    testf=open("testf.txt",'w')
     def open_spider(self, spider):
         self.storeFunc={'XMulItem':self.storeXMulItem,
 			'XSinItem':self.storeXSinItem,
@@ -28,6 +29,7 @@ class DBPipeline(object):
         self.cursor.close()
         self.conn.close()
         spider.browser.close()
+        self.testf.close()
         print "finish!"
 
     def storeXMulItem(self,item):
@@ -35,25 +37,40 @@ class DBPipeline(object):
         for instance in itemlist:
             instance=instance+(self.crawldate,)
             #self.cursor.execute("insert into gubarticleupdate (title,articleid,stockno,reply,click,crawldate) value ('%s',%s,'%s',%s,%s,'%s')"% instance)
-            #self.conn.commit()
+            
+        #self.conn.commit()
+        
 
 
 
 
     def storeXSinItem(self,item):
         pass
+        
 
     def storeYMulItem(self,item):
-
-        pass
+        itemlist=zip(item['YcommentAuthor'],item['YcommentDate'],item['YcommentContent'],item['YcommentAuthorid'],item['Yarticleid'])
+        for instance in itemlist:
+            self.cursor.execute("insert into reply (commentAuthor,commentDate,commentContent,commentAuthorid,articleid) value ('%s','%s','%s',%s,%s)"% instance)
+            print "insert into reply (commentAuthor,commentDate,commentContent,commentAuthorid,articleid) value ('%s','%s','%s',%s,%s)"% instance
+        self.conn.commit()
+      
 
     def storeYSinItem(self,item):
         instance=(item['Ytitle'],item['Yauthor'],item['Ystockno'],item['Ydate'],item['Ycontent'],item['Yarticleid'])
-        self.cursor.execute("insert ignore into article (title,author,stockno,time,content,articleid) value ('%s','%s','%s','%s','%s',%s)"% instance)#insert ignore会自动避免重复插入
-        self.conn.commit()
+        #self.cursor.execute("insert ignore into article (title,author,stockno,time,content,articleid) value ('%s','%s','%s','%s','%s',%s)"% instance)#insert ignore会自动避免重复插入
+        #self.conn.commit()
         
 
     def storeZMulItem(self,item):
+        itemlist=zip(item['ZcommentAuthor'],item['ZcommentDate'],item['ZcommentContent'],item['ZcommentAuthorid'],item['Zarticleid'])
+        for instance in itemlist:
+            self.cursor.execute("insert into reply (commentAuthor,commentDate,commentContent,commentAuthorid,articleid) value ('%s','%s','%s',%s,%s)"% instance)
+            s="insert into reply (commentAuthor,commentDate,commentContent,commentAuthorid,articleid) value ('%s','%s','%s',%s,%s)"% instance
+            print s
+            self.testf.write(s+'\n')
+            self.testf.flush()
+        self.conn.commit()
         pass
 
     def storeZSinItem(self,item):

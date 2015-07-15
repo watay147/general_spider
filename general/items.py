@@ -31,6 +31,8 @@ class YMulItem(scrapy.Item):
     YcommentAuthor=scrapy.Field()
     YcommentDate=scrapy.Field()
     YcommentContent=scrapy.Field()
+    YcommentAuthorid=scrapy.Field()
+    Yarticleid=scrapy.Field()
 
 class YSinItem(scrapy.Item):
     # define the fields for your item here like:

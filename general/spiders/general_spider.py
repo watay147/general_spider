@@ -57,9 +57,11 @@ class GeneralSpider(scrapy.Spider):
     YcommentAuthor="//div[@class='zwlianame']/span/a"
     YcommentDate="//div[@class='zwlitime']"
     YcommentContent="//div[@class='zwlitx']/div/div[3]"
+    YcommentAuthorid=YcommentAuthor
     Zsource="//*[@id='newspage']/span/a[last()-1]"
     Znextlink=Zsource
     ZcommentAuthor="//div[@class='zwlianame']/span/a"
+    ZcommentAuthorid=ZcommentAuthor
     ZcommentDate="//div[@class='zwlitime']"
     ZcommentContent="//div[@class='zwlitx']/div/div[3]"
     
@@ -83,9 +85,11 @@ class GeneralSpider(scrapy.Spider):
         'YcommentAuthor':self.extracttext,
         'YcommentDate':self.extracttime,
         'YcommentContent':self.extracttext,
+        'YcommentAuthorid':self.extracthrefid,
         'ZcommentAuthor':self.extracttext,
         'ZcommentDate':self.extracttime,
         'ZcommentContent':self.extracttext,
+        'ZcommentAuthorid':self.extracthrefid
         }
     #每项的名称与对应xpath元组，名称将用于索引预处理函数和作为数据库的键值，由于是字典，所以各层的类似元素名称必须不一样，考虑到可能不希望数据库的键值带有X，后面pipepiles.py可以取[1:]部分
         self.XMulTarget=[
@@ -98,7 +102,8 @@ class GeneralSpider(scrapy.Spider):
         self.YMulTarget=[
             ('YcommentAuthor',self.YcommentAuthor),
             ('YcommentDate',self.YcommentDate),
-            ('YcommentContent',self.YcommentContent)
+            ('YcommentContent',self.YcommentContent),
+            ('YcommentAuthorid',self.YcommentAuthorid)
             ]
         self.YSinTarget=[
             ('Ycontent',self.Ycontent),
@@ -109,7 +114,8 @@ class GeneralSpider(scrapy.Spider):
         self.ZMulTarget=[
             ('ZcommentAuthor',self.ZcommentAuthor),
             ('ZcommentDate',self.ZcommentDate),
-            ('ZcommentContent',self.ZcommentContent)
+            ('ZcommentContent',self.ZcommentContent),
+            ('ZcommentAuthorid',self.ZcommentAuthorid)
             ]
         self.ZSinTarget=[
             ]
@@ -131,12 +137,25 @@ class GeneralSpider(scrapy.Spider):
             return res.group(0)[6:-1].strip()
         return ""
 
+    #用于取出href属性内容
+    def extracthrefid(self,s):
+        s=self.extracthref(s)
+        if s:
+            res=re.search(r"\d+",s)
+            if res:
+                return res.group(0)
+        return "0"
+
     #用于取出元素内部的xxxx-xx-xx xx:xx:xx格式的时间内容
     def extracttime(self,s):
         s=self.extracttext(s)
+        self.f.write(s)
+        self.f.flush()
+        #print s
         if s:
-           res=re.search(r'\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d',s)
+           res=re.search(r'\d\d\d\d-\d\d-\d\d\s+\d\d:\d\d:\d\d',s)
            if res:
+               print res.group(0)
                return res.group(0)
         return ""
     #取出整数部分
@@ -175,9 +194,9 @@ class GeneralSpider(scrapy.Spider):
             for item in response.xpath(target):
                 itemcontent=self.funcDist[name](item.extract())
                 Xmuls[name].append(itemcontent)
-                print itemcontent
-                self.f.write(itemcontent.encode('utf8')+'\n')
-                self.f.flush()
+                #print itemcontent
+                #self.f.write(itemcontent.encode('utf8')+'\n')
+                #self.f.flush()
         Xmuls['Xstockno']=[self.extracturlid(response.url)]*len(Xmuls['Xtitle'])
         yield Xmuls
         #爬取X页的单重属性
@@ -185,9 +204,9 @@ class GeneralSpider(scrapy.Spider):
         for name,target in self.XSinTarget:
             itemcontent=self.funcDist[name](response.xpath(target).extract()[0])
             Xsin[name]=itemcontent
-            print itemcontent
-            self.f.write(itemcontent.encode('utf8')+'\n')
-            self.f.flush()
+            #print itemcontent
+            #self.f.write(itemcontent.encode('utf8')+'\n')
+            #self.f.flush()
         yield Xsin
         #产生到Y页的链接
         if self.Ysource:
@@ -213,19 +232,24 @@ class GeneralSpider(scrapy.Spider):
 
 ######Y层工作函数
     def parse_Y(self, response):
+        Ymuls=YMulItem()
         for name,target in self.YMulTarget:
+            Ymuls[name]=deque()
             for item in response.xpath(target):
                 itemcontent=self.funcDist[name](item.extract())
+                Ymuls[name].append(itemcontent)
                 #print itemcontent
                 self.f.write(itemcontent.encode('utf8')+'\n')
                 self.f.flush()
+        Ymuls['Yarticleid']=[self.extracturlid(response.url)]*len(Ymuls['YcommentAuthor'])
+        yield Ymuls
         Ysin=YSinItem()
         for name,target in self.YSinTarget:
             itemcontent=self.funcDist[name](response.xpath(target).extract()[0])
             Ysin[name]=itemcontent
             #print itemcontent
-            self.f.write(itemcontent.encode('utf8')+'\n')
-            self.f.flush()
+            #self.f.write(itemcontent.encode('utf8')+'\n')
+            #self.f.flush()
         Ysin['Ystockno']=self.extractstockno(response.url)
         Ysin['Yarticleid']=self.extracturlid(response.url)
         yield Ysin
@@ -234,7 +258,7 @@ class GeneralSpider(scrapy.Spider):
             for item in response.xpath(self.Zsource):
                 if item:
                     full_url=response.urljoin(self.extracthref(item.extract()))
-                    yield scrapy.Request(full_url, callback=self.parse_Z)
+                    yield scrapy.Request(full_url, callback=self.parse_Z,meta={'articleid':Ysin['Yarticleid']})
                 else:
                     print "操控浏览器访问url:"+response.url
                     self.browser.get(response.url)#访问当前访问的网址
@@ -247,12 +271,16 @@ class GeneralSpider(scrapy.Spider):
 ######Z层工作函数
     def parse_Z(self, response):
         #爬取Z页的多重属性
+        Zmuls=ZMulItem()
         for name,target in self.ZMulTarget:
             for item in response.xpath(target):
                 itemcontent=self.funcDist[name](item.extract())
+                Zmuls[name].append(itemcontent)
                 #print itemcontent
                 self.f.write(itemcontent.encode('utf8')+'\n')
                 self.f.flush()
+        Zmuls['Zarticleid']=response.meta['articleid']*len(Zmuls['YcommentAuthor'])
+        yield Zmuls
         #爬取Z页的单重属性
         for name,target in self.ZSinTarget:
             itemcontent=self.funcDist[name](response.xpath(target).extract()[0])
