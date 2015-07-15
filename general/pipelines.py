@@ -16,7 +16,7 @@ class DBPipeline(object):
 			'ZMulItem':self.storeZMulItem,
 			'ZSinItem':self.storeZSinItem,
 			}
-        self.conn = MySQLdb.Connect(host='localhost', user='root', passwd='wo5024312', db='testdb',charset='utf8')
+        self.conn = MySQLdb.Connect( user='root',  db='testdb',charset='utf8')
         self.cursor=self.conn.cursor() 
 
     def process_item(self, item, spider):
@@ -28,6 +28,8 @@ class DBPipeline(object):
         self.testf.close()
         self.cursor.close()
         self.conn.close()
+        spider.browser.close()
+        print "finish!"
 
     def storeXMulItem(self,item):
         itemlist=zip(item['Xtitle'],item['Xauthor'],item['Xreply'],item['Xclick'])
