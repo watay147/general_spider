@@ -40,8 +40,8 @@ from general.items import ZMulItem
 from general.items import ZSinItem
 class GeneralSpider(scrapy.Spider):
     name = 'general'
-    start_urls = ['http://guba.eastmoney.com/list,000415.html']
-    maxX=1#控制测试时爬取的X层页面数目。
+    start_urls = ["http://guba.eastmoney.com/list,000415_739.html"]
+    maxX=2#控制测试时爬取的X层页面数目。
     countX=0
     Xtitle="//div[@class='articleh']/span[3]/a"
     Xarticleid="//div[@class='articleh']/span[3]/a/@href"
@@ -69,8 +69,11 @@ class GeneralSpider(scrapy.Spider):
 
     def __init__(self):
         #启动对浏览器的操控
+        startf=open('start.txt')#相对路径起点是project根目录
+        self.start_urls=startf.readlines()
+        startf.close()
         self.browser= webdriver.Remote(desired_capabilities=DesiredCapabilities.HTMLUNIT)
-        self.browser.implicitly_wait(10)
+        self.browser.implicitly_wait(60)
         self.f=open('test.txt','w')#用于存储测试输出内容的文本文件
     #每项的预处理函数字典
         self.funcDist={
@@ -127,7 +130,11 @@ class GeneralSpider(scrapy.Spider):
     def extracttext(self,s):
         res=re.search(">.*<",s,re.DOTALL)
         if res:
-            return res.group(0)[1:-1].strip()
+            ans=res.group(0)[1:-1].strip()
+            #return re.sub(r'<[^<]*</[^>]*>','',ans)#同时去掉所有标签及标签内内容
+            ans=re.sub(r'<[^>]*>','',ans)
+            ans=re.sub(r'&nbsp','',ans)
+            return ans
         return ""
 
     #用于取出href属性内容
@@ -149,8 +156,8 @@ class GeneralSpider(scrapy.Spider):
     #用于取出元素内部的xxxx-xx-xx xx:xx:xx格式的时间内容
     def extracttime(self,s):
         s=self.extracttext(s)
-        self.f.write(s)
-        self.f.flush()
+        #self.f.write(s)
+        #self.f.flush()
         #print s
         if s:
            res=re.search(r'\d\d\d\d-\d\d-\d\d\s+\d\d:\d\d:\d\d',s)
@@ -185,8 +192,9 @@ class GeneralSpider(scrapy.Spider):
     def parse(self, response):
         #控制爬取的X页数目
         self.countX+=1
-        if self.countX>self.maxX:
-            return
+
+        #if self.countX>self.maxX:
+        #    return
         #爬取X页的多重属性
         Xmuls=XMulItem()
         for name,target in self.XMulTarget:
@@ -213,6 +221,10 @@ class GeneralSpider(scrapy.Spider):
             for item in response.xpath(self.Ysource):
                 full_url=response.urljoin(self.extracthref(item.extract()))
                 yield scrapy.Request(full_url, callback=self.parse_Y)
+
+        self.f.write(response.url+"\n")
+        self.f.flush()
+
         nexthref=response.xpath(self.Xnextlink)
         #构造到下一个同层页的链接
         if nexthref:
@@ -229,6 +241,7 @@ class GeneralSpider(scrapy.Spider):
                 yield scrapy.Request(nexturl, callback=self.parse)
             else:
                 print "end!"
+           
 
 ######Y层工作函数
     def parse_Y(self, response):
@@ -239,8 +252,8 @@ class GeneralSpider(scrapy.Spider):
                 itemcontent=self.funcDist[name](item.extract())
                 Ymuls[name].append(itemcontent)
                 #print itemcontent
-                self.f.write(itemcontent.encode('utf8')+'\n')
-                self.f.flush()
+                #self.f.write(itemcontent.encode('utf8')+'\n')
+                #self.f.flush()
         Ymuls['Yarticleid']=[self.extracturlid(response.url)]*len(Ymuls['YcommentAuthor'])
         yield Ymuls
         Ysin=YSinItem()
@@ -277,16 +290,16 @@ class GeneralSpider(scrapy.Spider):
                 itemcontent=self.funcDist[name](item.extract())
                 Zmuls[name].append(itemcontent)
                 #print itemcontent
-                self.f.write(itemcontent.encode('utf8')+'\n')
-                self.f.flush()
+                #self.f.write(itemcontent.encode('utf8')+'\n')
+                #self.f.flush()
         Zmuls['Zarticleid']=response.meta['articleid']*len(Zmuls['YcommentAuthor'])
         yield Zmuls
         #爬取Z页的单重属性
         for name,target in self.ZSinTarget:
             itemcontent=self.funcDist[name](response.xpath(target).extract()[0])
             #print itemcontent
-            self.f.write(itemcontent.encode('utf8')+'\n')
-            self.f.flush()
+            #self.f.write(itemcontent.encode('utf8')+'\n')
+            #self.f.flush()
         #构造到下一个同层页的链接
         nexthref=response.xpath(self.Znextlink)     
         if nexthref:
