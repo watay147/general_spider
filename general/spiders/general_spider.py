@@ -1,5 +1,5 @@
 #encoding=utf-8
-#########V0.2使用和扩展简介##############################
+#########V0.3使用和扩展简介##############################
 #   首先安装scrapy和selenium,安装方法为先安装pip包管理工具，再使用pip命令进行安装：
 #   pip install scrapy和pip install selenium
 #   配置修改完后，先通过命令行启动htmlunit(selenium server的jar包里已经包含)，在selenium-server-standalone-2.40.0.jar所在目录下执行java -jar selenium-server-standalone-2.40.0.jar,然后在本.py文件存放路径下命令行执行scrapy runspider general_spider.py即可。
@@ -20,299 +20,123 @@
 #   3.给出xpath定义后，请修改funcDist字典，给出每个xpath获取到的元素的名称及对应预处理函数名（如果该函数是新增的请在辅助函数部分直接新写一个函数）。格式为：  属性名称:函数名
 #   4.修改对应层的多重属性和单重属性元组列表，如XMulTarget和XSinTarget,*MulTarget用于存放多重属性，*SinTarget存放单重。加入的每个元组格式为：  (属性名称,xpath字符串变量名)
 #   5.目前的实现中仅对Xnextlink进行是否需要动态获得（于是需要操控浏览器加载获得）的判断逻辑，对其他元素的获取如果需要这一判断逻辑也可以参考进行实现。
-#   6.目前的测试中爬取到的内容会输出到控制台并以utf8编码写入到当前路径下的test.txt文件（阅读代码可以获悉），由于没有使用完整的scrapy框架（完整爬虫项目除spider文件外还需定义settings.py,pipepiles.py等），没有合适的位置来关闭打开的文本文件（可能在某处关闭后其他线程还没有结束，会造成对已关闭文件的写入），故写入时都使用了flush方法来刷新写缓冲区以保证跑完时得到的输出文件内容完整。这些问题会在使用完整框架后在pipepiles.py里定义爬虫关闭时调用的close_spider函数解决。
+#   6.数据库的写入pipepiles.py里定义,建议先阅读这部分代码（并不长）,每层爬取的item定义在items.py里定义，数据项有变动时也需要修改。目前每一层使用sinitem(单个item)和mulitem（重复item）两种，mulitem放进来的方式是作为数组（deque）放入，最后再pipepiles里对多个数组按顺序解包从而保证属于同个文章的阅读数，标题等按顺序作为数据库的一行写入，具体可以看代码。
 #   7.建议使用前先阅读完代码（并不长）。
-#   8.运行过程中可能会在操控浏览器获取某个网页时卡住，可以检查下如果直接用浏览器访问是否会卡住，一般是因为网页某些ajax请求获取卡住了，可以检查是否需要开启外网等。
+#   8.运行过程中可能会在操控浏览器获取某个网页时卡住，可以检查下如果直接用浏览器访问是否会卡住，一般是因为网页某些ajax请求获取卡住了，可以检查是否需要开启外网等。self.browser.implicitly_wait(60)可以设置每次等待ajax多少秒（若60则等待60秒，提前拿到元素就继续，否则超时停止，参数可以自己调）
 #   目前的速度：爬股吧170个文章2秒（用实验室爬虫是3秒/文章。。。）
 #########################################################################
-
-import scrapy
 import os
-from collections import deque
+import sys
+import ConfigParser
+import scrapy
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-import re
-from general.items import XMulItem
-from general.items import XSinItem
-from general.items import YMulItem
-from general.items import YSinItem
-from general.items import ZMulItem
-from general.items import ZSinItem
+
+from collections import deque
+
+from extracter import *
+from general.items import *
+
 class GeneralSpider(scrapy.Spider):
     name = 'general'
-    start_urls = ["http://guba.eastmoney.com/list,000415_739.html"]
-    maxX=2#控制测试时爬取的X层页面数目。
-    countX=0
-    Xtitle="//div[@class='articleh']/span[3]/a"
-    Xarticleid="//div[@class='articleh']/span[3]/a/@href"
-    Xreply="//div[@class='articleh']/span[2]"
-    Xclick="//div[@class='articleh']/span[1]"
-    Xnextlink="//span[@class='pagernums']/span/a[last()-1]"
-    Ysource=Xtitle
-    Ynextlink=""
-    Ytitle="//div[@id='zwconttbt']"
-    Ycontent="//div[@class='stockcodec']"
-    Ydate="//div[@id='zwconttb']/div[2]"
-    Yauthor="//div[@id='zwconttbn']/strong/*"
-    YcommentAuthor="//div[@class='zwlianame']/span/a"
-    YcommentDate="//div[@class='zwlitime']"
-    YcommentContent="//div[@class='zwlitx']/div/div[3]"
-    YcommentAuthorid=YcommentAuthor
-    Zsource="//*[@id='newspage']/span/a[last()-1]"
-    Znextlink=Zsource
-    ZcommentAuthor="//div[@class='zwlianame']/span/a"
-    ZcommentAuthorid=ZcommentAuthor
-    ZcommentDate="//div[@class='zwlitime']"
-    ZcommentContent="//div[@class='zwlitx']/div/div[3]"
+    start_urls = []
     
 
 
+
     def __init__(self):
-        #启动对浏览器的操控
-        startf=open('start.txt')#相对路径起点是project根目录
-        self.start_urls=startf.readlines()
-        startf.close()
-        self.browser= webdriver.Remote(desired_capabilities=DesiredCapabilities.HTMLUNIT)
+        #Set up the connection to it and initinalize the browser.
+        self.browser= webdriver.Remote("http://127.0.0.1:4800/wd/hub",desired_capabilities=DesiredCapabilities.HTMLUNIT)
         self.browser.implicitly_wait(60)
-        self.f=open('test.txt','w')#用于存储测试输出内容的文本文件
-    #每项的预处理函数字典
-        self.funcDist={
-        'Xtitle':self.extracttext,
-        'Xarticleid':self.extracturlid,
-        'Xreply':self.extractint,
-        'Xclick':self.extractint,
-        'Ycontent':self.extracttext,    
-        'Ydate':self.extracttime,
-        'Ytitle':self.extracttext,
-        'Yauthor':self.extracttext,
-        'YcommentAuthor':self.extracttext,
-        'YcommentDate':self.extracttime,
-        'YcommentContent':self.extracttext,
-        'YcommentAuthorid':self.extracthrefid,
-        'ZcommentAuthor':self.extracttext,
-        'ZcommentDate':self.extracttime,
-        'ZcommentContent':self.extracttext,
-        'ZcommentAuthorid':self.extracthrefid
-        }
-    #每项的名称与对应xpath元组，名称将用于索引预处理函数和作为数据库的键值，由于是字典，所以各层的类似元素名称必须不一样，考虑到可能不希望数据库的键值带有X，后面pipepiles.py可以取[1:]部分
-        self.XMulTarget=[
-            ('Xtitle',self.Xtitle), 
-            ('Xarticleid',self.Xarticleid),
-            ('Xreply',self.Xreply),
-            ('Xclick',self.Xclick)
-        ]
-        self.XSinTarget=[]
-        self.YMulTarget=[
-            ('YcommentAuthor',self.YcommentAuthor),
-            ('YcommentDate',self.YcommentDate),
-            ('YcommentContent',self.YcommentContent),
-            ('YcommentAuthorid',self.YcommentAuthorid)
-            ]
-        self.YSinTarget=[
-            ('Ycontent',self.Ycontent),
-            ('Ydate',self.Ydate),
-            ('Ytitle',self.Ytitle),
-            ('Yauthor',self.Yauthor)
-        ]
-        self.ZMulTarget=[
-            ('ZcommentAuthor',self.ZcommentAuthor),
-            ('ZcommentDate',self.ZcommentDate),
-            ('ZcommentContent',self.ZcommentContent),
-            ('ZcommentAuthorid',self.ZcommentAuthorid)
-            ]
-        self.ZSinTarget=[
-            ]
+        self.max=2
+        self.count=0
 
 
-#######辅助函数#######
-	
-    #用于取出元素内部的文本内容
-    def extracttext(self,s):
-        res=re.search(">.*<",s,re.DOTALL)
-        if res:
-            ans=res.group(0)[1:-1].strip()
-            #return re.sub(r'<[^<]*</[^>]*>','',ans)#同时去掉所有标签及标签内内容
-            ans=re.sub(r'<[^>]*>','',ans)
-            ans=re.sub(r'&nbsp','',ans)
-            return ans
-        return ""
+        #try to read the content from config files
+        self.conf=ConfigParser.ConfigParser()
+        conf=self.conf
+        if not conf.read('config.py'):
+            print "\'config.py\' not found, please make sure you have prepared such a file."
+            sys.exit(1)
+        confpath=conf.get('default','path')
+        if not conf.read(confpath) :
+            print "\'"+confpath+"\' not found, please make sure you have prepared such a file."
 
-    #用于取出href属性内容
-    def extracthref(self,s):
-        res=re.search('''href=\"[^"]+"''',s)
-        if res:
-            return res.group(0)[6:-1].strip()
-        return ""
+        self.start_urls=eval(conf.get('basic','urls'))
+        self.levels=conf.get('basic','levels')
+        self.func_dist=[]
+        self.sin_targets_xpath=[]
+        self.mul_targets_xpath=[]
+        self.next_link=[]
+        self.source_link=[]
 
-    #用于取出href属性内容
-    def extracthrefid(self,s):
-        s=self.extracthref(s)
-        if s:
-            res=re.search(r"\d+",s)
-            if res:
-                return res.group(0)
-        return "0"
+        for index in range(int(self.levels)):
+            self.func_dist.append({
+                itemname : globals().get(funcname) 
+                    for itemname,funcname in conf.items("level"+str(index)+"extract")})
+            self.sin_targets_xpath.append({
+                itemdef :  { itemname : conf.get("level"+str(index)+"xpath",itemname).strip("\"").strip("\'") for itemname in eval(itemlist) } 
+                    for itemdef,itemlist in conf.items("level"+str(index)+"sinitems")})
+            self.mul_targets_xpath.append({
+                itemdef :  { itemname : conf.get("level"+str(index)+"xpath",itemname).strip("\"").strip("\'") for itemname in eval(itemlist) } 
+                    for itemdef,itemlist in conf.items("level"+str(index)+"mulitems")})
 
-    #用于取出元素内部的xxxx-xx-xx xx:xx:xx格式的时间内容
-    def extracttime(self,s):
-        s=self.extracttext(s)
-        #self.f.write(s)
-        #self.f.flush()
-        #print s
-        if s:
-           res=re.search(r'\d\d\d\d-\d\d-\d\d\s+\d\d:\d\d:\d\d',s)
-           if res:
-               print res.group(0)
-               return res.group(0)
-        return ""
-    #取出整数部分
-    def extractint(self,s):
-        s=self.extracttext(s)
-        if s:
-           res=re.search(r'\d+',s)
-           if res:
-               return res.group(0)
-        return ""
-    #直接取出整数部分
-    def extracturlid(self,s):
-        res=re.search(r'\d+.html',s)
-        if res:
-            return res.group(0)[:-5]
-        return ""
-    def extractstockno(self,s):
-        res=re.search(r',.+,',s)
-        if res:
-            return res.group(0)[1:-1]
-        return ""
-        
-#######辅助函数#######
+            if(conf.has_option("level"+str(index)+"xpath",'nextlink')):
+                self.next_link.append(conf.get("level"+str(index)+"xpath",'nextlink').strip("\"").strip("\'"))
+            else:
+                self.next_link.append("")
+
+            if(conf.has_option("level"+str(index)+"xpath",'sourcelink')):
+                self.source_link.append(conf.get("level"+str(index)+"xpath",'sourcelink').strip("\"").strip("\'"))
+            else:
+                self.source_link.append("")
 
 
-######X层工作函数
+#The parser
     def parse(self, response):
-        #控制爬取的X页数目
-        self.countX+=1
+        level=response.meta.get('level',0)
+        if(level==0):
+            self.count+=1
+            if self.count>=self.max:
+                return 
 
-        #if self.countX>self.maxX:
-        #    return
-        #爬取X页的多重属性
-        Xmuls=XMulItem()
-        for name,target in self.XMulTarget:
-            Xmuls[name]=deque()
-            for item in response.xpath(target):
-                itemcontent=self.funcDist[name](item.extract())
-                Xmuls[name].append(itemcontent)
-                #print itemcontent
-                #self.f.write(itemcontent.encode('utf8')+'\n')
-                #self.f.flush()
-        Xmuls['Xstockno']=[self.extracturlid(response.url)]*len(Xmuls['Xtitle'])
-        yield Xmuls
-        #爬取X页的单重属性
-        Xsin=XSinItem()
-        for name,target in self.XSinTarget:
-            itemcontent=self.funcDist[name](response.xpath(target).extract()[0])
-            Xsin[name]=itemcontent
-            #print itemcontent
-            #self.f.write(itemcontent.encode('utf8')+'\n')
-            #self.f.flush()
-        yield Xsin
-        #产生到Y页的链接
-        if self.Ysource:
-            for item in response.xpath(self.Ysource):
-                full_url=response.urljoin(self.extracthref(item.extract()))
-                yield scrapy.Request(full_url, callback=self.parse_Y)
 
-        self.f.write(response.url+"\n")
-        self.f.flush()
+        #For single items, simply extract them into one pipeline object and yield it.
+        for itemdef,xpaths in self.sin_targets_xpath[level].iteritems():
+            pipeobj=globals().get("level"+str(level)+itemdef)()
+            for itemname,xpath in xpaths.iteritems():
+                itemcontent=self.func_dist[level][itemname](response.xpath(xpath).extract()[0])
+                pipeobj[itemname]=itemcontent
+            yield pipeobj
 
-        nexthref=response.xpath(self.Xnextlink)
-        #构造到下一个同层页的链接
-        if nexthref:
-            nexturl=self.extracthref(nexthref.extract()[0])
-            yield scrapy.Request(nexturl, callback=self.parse)
-        #如果获取不到，说明要获取的元素是动态得到的，应该使用Marionette来获取。
-        else:
-            print "操控浏览器访问url:"+response.url
-            self.browser.get(response.url)#访问当前访问的网址
-            links=self.browser.find_elements_by_xpath(self.Xnextlink)#使用同样的xpath获取元素
-            if links:
-                nexturl=links[0].get_attribute("href")
-                print links[0].get_attribute("href")
-                yield scrapy.Request(nexturl, callback=self.parse)
+        #For multiple items, use deques to save the extracted items with different itemnames in order and yield the pipeline object containing such deques. Extra works should be done to handle these in pipelines.py.
+        for itemdef,xpaths in self.mul_targets_xpath[level].iteritems():
+            pipeobj=globals().get("level"+str(level)+itemdef)()
+            for itemname,xpath in xpaths.iteritems():
+                pipeobj[itemname]=deque()
+                for item in response.xpath(xpath):
+                    itemcontent=self.func_dist[level][itemname](item.extract())
+                    pipeobj[itemname].append(itemcontent)
+            yield pipeobj
+
+        #Extract the source links to next level.
+        if self.source_link[level]:
+            for item in response.xpath(self.source_link[level]):
+                full_url=response.urljoin(self.func_dist[level]['sourcelink'](item.extract()))
+                yield scrapy.Request(full_url,callback=self.parse,meta={'level':level+1})
+
+        #Extract the link to next page in the same level.
+        if self.next_link[level]:
+            nexthref=response.xpath(self.next_link[level])
+            if nexthref:
+                nexturl=self.func_dist[level]['nextlink'](nexthref.extract()[0])
+                yield scrapy.Request(nexturl, callback=self.parse,meta={'level':level})
+            #If failed, use browser to extract instead.
             else:
-                print "end!"
-           
+                self.browser.get(response.url)
+                links=self.browser.find_elements_by_xpath(self.next_link[level])
+                if links:
+                    nexturl=links[0].get_attribute("href")
+                    yield scrapy.Request(nexturl, callback=self.parse,meta={'level':level})
 
-######Y层工作函数
-    def parse_Y(self, response):
-        Ymuls=YMulItem()
-        for name,target in self.YMulTarget:
-            Ymuls[name]=deque()
-            for item in response.xpath(target):
-                itemcontent=self.funcDist[name](item.extract())
-                Ymuls[name].append(itemcontent)
-                #print itemcontent
-                #self.f.write(itemcontent.encode('utf8')+'\n')
-                #self.f.flush()
-        Ymuls['Yarticleid']=[self.extracturlid(response.url)]*len(Ymuls['YcommentAuthor'])
-        yield Ymuls
-        Ysin=YSinItem()
-        for name,target in self.YSinTarget:
-            itemcontent=self.funcDist[name](response.xpath(target).extract()[0])
-            Ysin[name]=itemcontent
-            #print itemcontent
-            #self.f.write(itemcontent.encode('utf8')+'\n')
-            #self.f.flush()
-        Ysin['Ystockno']=self.extractstockno(response.url)
-        Ysin['Yarticleid']=self.extracturlid(response.url)
-        yield Ysin
-        #产生到Z页的链接
-        if self.Zsource:
-            for item in response.xpath(self.Zsource):
-                if item:
-                    full_url=response.urljoin(self.extracthref(item.extract()))
-                    yield scrapy.Request(full_url, callback=self.parse_Z,meta={'articleid':Ysin['Yarticleid']})
-                else:
-                    print "操控浏览器访问url:"+response.url
-                    self.browser.get(response.url)#访问当前访问的网址
-                    links=self.browser.find_elements_by_xpath(self.Zsource)#使用同样的xpath获取元素
-                    for taga in links:
-                        href=taga.get_attribute("href")
-                        yield scrapy.Request(href, callback=self.parse_Z)
-                    break
-
-######Z层工作函数
-    def parse_Z(self, response):
-        #爬取Z页的多重属性
-        Zmuls=ZMulItem()
-        for name,target in self.ZMulTarget:
-            for item in response.xpath(target):
-                itemcontent=self.funcDist[name](item.extract())
-                Zmuls[name].append(itemcontent)
-                #print itemcontent
-                #self.f.write(itemcontent.encode('utf8')+'\n')
-                #self.f.flush()
-        Zmuls['Zarticleid']=response.meta['articleid']*len(Zmuls['YcommentAuthor'])
-        yield Zmuls
-        #爬取Z页的单重属性
-        for name,target in self.ZSinTarget:
-            itemcontent=self.funcDist[name](response.xpath(target).extract()[0])
-            #print itemcontent
-            #self.f.write(itemcontent.encode('utf8')+'\n')
-            #self.f.flush()
-        #构造到下一个同层页的链接
-        nexthref=response.xpath(self.Znextlink)     
-        if nexthref:
-            nexturl=self.extracthref(nexthref.extract()[0])
-            yield scrapy.Request(nexturl, callback=self.parse_Z)
-        #如果获取不到，说明要获取的元素是动态得到的，应该使用Marionette来获取。
-        else:
-            print "操控浏览器访问url:"+response.url
-            self.browser.get(response.url)#访问当前访问的网址
-            links=self.browser.find_elements_by_xpath(self.Znextlink)#使用同样的xpath获取元素
-            if links:
-                print links[0].get_attribute("href")
-                nexturl=links[0].get_attribute("href")
-                yield scrapy.Request(nexturl, callback=self.parse_Z)
-            else:
-                print "end!"
+        

@@ -5,75 +5,65 @@
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: http://doc.scrapy.org/en/latest/topics/item-pipeline.html
 import MySQLdb
+import ConfigParser
 import time
 import re
 class DBPipeline(object):
 
     def open_spider(self, spider):
-        self.storeFunc={'XMulItem':self.storeXMulItem,
-			'XSinItem':self.storeXSinItem,
-			'YMulItem':self.storeYMulItem,
-			'YSinItem':self.storeYSinItem,
-			'ZMulItem':self.storeZMulItem,
-			'ZSinItem':self.storeZSinItem,
-			}
-        self.conn = MySQLdb.Connect( user='root',  db='guba',charset='utf8')
+        #Fetch the existing conf for convience from the spider object which had been initinalized.
+        conf=spider.conf
+        self.levels=spider.levels
+        self.prefix=[]
+        for index in range(int(self.levels)):
+            self.prefix.append({ itemdef:prefix.strip("\"").strip("\'") for itemdef,prefix in conf.items("level"+str(index)+"dbprefix")})
+
+        #self.conn = MySQLdb.Connect( user=conf.get('basic','dbuser'),  db=conf.get('basic','dbname'),passwd=conf.get('basic','dbpswd'),charset='utf8')
+        self.conn = MySQLdb.Connect( user="root",  db="test",charset='utf8')
         self.cursor=self.conn.cursor() 
         self.crawldate=time.strftime("%Y-%m-%d",time.localtime())
-        self.stockno=re.search(r',\d+',spider.start_urls[0]).group(0)[1:]
+
 
     def process_item(self, item, spider):
-        
-        if len(item)!=0:
-            self.storeFunc[item.__class__.__name__](item)
+        if len(item)==0:
+            return item
+        itemcls=item.__class__.__name__
+        itemlevel=int(re.search("level(\d+)",itemcls).group(1))
+        itemdef=re.search("level\d+(item\d+)",itemcls).group(1)
+        if itemdef in spider.sin_targets_xpath[itemlevel]:
+            self.store_sin_item(spider,item,itemlevel,itemdef)
+        elif itemdef in spider.mul_targets_xpath[itemlevel]:
+            self.store_mul_item(spider,item,itemlevel,itemdef)
         return item
 
     def close_spider(self,spider):
         self.cursor.close()
         self.conn.close()
         spider.browser.close()
-        spider.f.close()
         print "finish!"
 
-    def storeXMulItem(self,item):
-        itemlist=zip(item['Xtitle'],item['Xarticleid'],item['Xstockno'],item['Xreply'],item['Xclick'])
+    def store_mul_item(self,spider,item,itemlevel,itemdef):
+        #Note that the keys method return the keys without ensuring the order. But if we use itemnames with determined order consistently, the order problem will be solved.
+        itemnames=spider.mul_targets_xpath[itemlevel][itemdef].keys()
+        #Note that [] gets a list but () gets a generator
+        itemtuple=(item[itemname] for itemname in itemnames)
+        itemlist=zip(*itemtuple)
         for instance in itemlist:
-            instance=instance+(self.crawldate,)
-            self.cursor.execute("insert ignore into `gubarticleupdate%s` (title,articleid,stockno,reply,click,crawldate) value ('%s',%s,'%s',%s,%s,'%s')"% ((self.stockno,)+instance))
+            #Use 'insert ignore' to handle duplicate items
+            querystring="insert ignore into `"+self.prefix[itemlevel][itemdef]+"`("+','.join(itemnames)+") value ("+','.join(("\'%s\'",)*len(itemnames))+")"
             
+            querystring=querystring % instance
+            self.cursor.execute(querystring)
         self.conn.commit()
-        
 
 
-
-
-    def storeXSinItem(self,item):
-        pass
-        
-
-    def storeYMulItem(self,item):
-        itemlist=zip(item['YcommentAuthor'],item['YcommentDate'],item['YcommentContent'],item['YcommentAuthorid'],item['Yarticleid'])
-        for instance in itemlist:
-            self.cursor.execute("insert ignore into `reply%s` (commentAuthor,commentDate,commentContent,commentAuthorid,articleid) value ('%s','%s','%s',%s,%s)"% ((self.stockno,)+instance))
+    def store_sin_item(self,spider,item,itemlevel,itemdef):
+        itemnames=spider.sin_targets_xpath[itemlevel][itemdef].keys()
+        #Note that [] gets a list but () gets a generator
+        instance=[item[itemname] for itemname in itemnames]
+        querystring="insert ignore into `"+self.prefix[itemlevel][itemdef]+"`("+','.join(itemnames)+") value ("+','.join(("\'%s\'",)*len(itemnames))+")" 
+        querystring=querystring % tuple(instance)
+        self.cursor.execute(querystring)
         self.conn.commit()
-      
-
-    def storeYSinItem(self,item):
-        instance=(item['Ytitle'],item['Yauthor'],item['Ystockno'],item['Ydate'],item['Ycontent'],item['Yarticleid'])
-        self.cursor.execute("insert ignore into `article%s` (title,author,stockno,time,content,articleid) value ('%s','%s','%s','%s','%s',%s)"% ((self.stockno,)+instance))#insert ignore会自动避免重复插入
-        self.conn.commit()
-        
-
-    def storeZMulItem(self,item):
-        itemlist=zip(item['ZcommentAuthor'],item['ZcommentDate'],item['ZcommentContent'],item['ZcommentAuthorid'],item['Zarticleid'])
-        for instance in itemlist:
-            self.cursor.execute("insert ignore into `reply%s` (commentAuthor,commentDate,commentContent,commentAuthorid,articleid) value ('%s','%s','%s',%s,%s)"% (self.stockno,)+instance)
-        
-        self.conn.commit()
-    
-
-    def storeZSinItem(self,item):
-        pass
-
 
 

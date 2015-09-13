@@ -1,8 +1,13 @@
 import MySQLdb
 import pandas as pd
 import re
-conn = MySQLdb.Connect( user='root',  db='guba',charset='utf8')
+conn = MySQLdb.Connect( user='root',  db='gubatest',charset='utf8')
 cursor=conn.cursor()
+xueqiu=[
+"http://guba.eastmoney.com/list,300359_1.html",
+"http://guba.eastmoney.com/list,601766_1.html",
+"http://guba.eastmoney.com/list,300104_1.html",
+]
 l=["http://guba.eastmoney.com/list,000415_1.html",
 "http://guba.eastmoney.com/list,002256.html",
 "http://guba.eastmoney.com/list,300207_1.html",
@@ -42,6 +47,24 @@ l=["http://guba.eastmoney.com/list,000415_1.html",
 "http://guba.eastmoney.com/list,000837_1.html",
 "http://guba.eastmoney.com/list,300348_1.html",
 "http://guba.eastmoney.com/list,300301_1.html"]
+l=[
+"http://guba.eastmoney.com/list,300059,f_1.html",
+"http://guba.eastmoney.com/list,600151,f_1.html",
+"http://guba.eastmoney.com/list,000547,f_1.html",
+"http://guba.eastmoney.com/list,002508,f_1.html",
+"http://guba.eastmoney.com/list,002042,f_1.html",
+"http://guba.eastmoney.com/list,601668,f_1.html",
+"http://guba.eastmoney.com/list,002456,f_1.html",
+"http://guba.eastmoney.com/list,600030,f_1.html",
+"http://guba.eastmoney.com/list,300364,f_1.html",
+"http://guba.eastmoney.com/list,300380,f_1.html",
+"http://guba.eastmoney.com/list,300274,f_1.html",
+"http://guba.eastmoney.com/list,300056,f_1.html",
+"http://guba.eastmoney.com/list,601988,f_1.html",
+"http://guba.eastmoney.com/list,601857,f_1.html"
+]
+  
+
 for i in l:
     num=re.search(r',\d+',i).group(0)[1:]
     cursor.execute("CREATE TABLE IF NOT EXISTS `reply%s` (`commentAuthor` varchar(40) NOT NULL,`commentDate` datetime NOT NULL,`commentContent` varchar(500) NOT NULL,`commentAuthorid` bigint(64) NOT NULL,`articleid` int(64) NOT NULL,UNIQUE KEY `uk_t_1` (`commentAuthorid`,`commentDate`)) ENGINE=InnoDB DEFAULT CHARSET=utf8; "% (num,))

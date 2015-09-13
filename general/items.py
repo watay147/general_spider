@@ -8,55 +8,25 @@
 import scrapy
 
 
-class XMulItem(scrapy.Item):
+class level0item0(scrapy.Item):
     # define the fields for your item here like:
     # name = scrapy.Field()
-    Xtitle=scrapy.Field()
-    Xarticleid=scrapy.Field()
-    Xreply=scrapy.Field()
-    Xclick=scrapy.Field()
-    Xstockno=scrapy.Field()
+    title=scrapy.Field()
+    articleid=scrapy.Field()
 
-class XSinItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    Xtitle=scrapy.Field()
-    Xauthor=scrapy.Field()
-    Xreply=scrapy.Field()
-    Xclick=scrapy.Field()
 
-class YMulItem(scrapy.Item):
+class level0item1(scrapy.Item):
     # define the fields for your item here like:
     # name = scrapy.Field()
-    YcommentAuthor=scrapy.Field()
-    YcommentDate=scrapy.Field()
-    YcommentContent=scrapy.Field()
-    YcommentAuthorid=scrapy.Field()
-    Yarticleid=scrapy.Field()
+    reply=scrapy.Field()
+    click=scrapy.Field()
 
-class YSinItem(scrapy.Item):
+class level1item0(scrapy.Item):
     # define the fields for your item here like:
     # name = scrapy.Field()
-    Ycontent=scrapy.Field()
-    Ydate=scrapy.Field()
-    Ytitle=scrapy.Field()
-    Yauthor=scrapy.Field()
-    Ystockno=scrapy.Field()
-    Yarticleid=scrapy.Field()
-    
+    title=scrapy.Field()
+    content=scrapy.Field()
+    author=scrapy.Field()
 
-class ZMulItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    ZcommentAuthor=scrapy.Field()
-    ZcommentDate=scrapy.Field()
-    ZcommentContent=scrapy.Field()
-
-class ZSinItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    ZcommentAuthor=scrapy.Field()
-    ZcommentDate=scrapy.Field()
-    ZcommentContent=scrapy.Field()
     
 
