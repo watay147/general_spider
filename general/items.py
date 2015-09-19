@@ -8,25 +8,12 @@
 import scrapy
 
 
-class level0item0(scrapy.Item):
+
+class sampleitem(scrapy.Item):
     # define the fields for your item here like:
     # name = scrapy.Field()
-    title=scrapy.Field()
-    articleid=scrapy.Field()
 
 
-class level0item1(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    reply=scrapy.Field()
-    click=scrapy.Field()
-
-class level1item0(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    title=scrapy.Field()
-    content=scrapy.Field()
-    author=scrapy.Field()
 
     
 

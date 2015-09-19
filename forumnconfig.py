@@ -1,9 +1,9 @@
 [basic]
 urls=["http://guba.eastmoney.com/list,000415_739.html"]
 levels=2
-dbuser="root"
-dbpswd=""
-dbname="test"
+dbuser=root
+dbpswd=
+dbname=test
 
 #Note: Do not use a name for item definition multiple times within a level. But this restrict doesn't matter for different levels.
 [level0sinitems]

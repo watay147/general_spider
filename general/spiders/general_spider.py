@@ -35,7 +35,7 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from collections import deque
 
 from extracter import *
-from general.items import *
+
 
 class GeneralSpider(scrapy.Spider):
     name = 'general'
@@ -48,7 +48,7 @@ class GeneralSpider(scrapy.Spider):
         #Set up the connection to it and initinalize the browser.
         self.browser= webdriver.Remote("http://127.0.0.1:4800/wd/hub",desired_capabilities=DesiredCapabilities.HTMLUNIT)
         self.browser.implicitly_wait(60)
-        self.max=2
+        self.max=3
         self.count=0
 
 
@@ -71,16 +71,35 @@ class GeneralSpider(scrapy.Spider):
         self.source_link=[]
 
         for index in range(int(self.levels)):
+            #Fullfill function distionary for extracting different items.
             self.func_dist.append({
                 itemname : globals().get(funcname) 
                     for itemname,funcname in conf.items("level"+str(index)+"extract")})
+            #Fullfill single items' xpaths dictionary for different levels. 
             self.sin_targets_xpath.append({
                 itemdef :  { itemname : conf.get("level"+str(index)+"xpath",itemname).strip("\"").strip("\'") for itemname in eval(itemlist) } 
                     for itemdef,itemlist in conf.items("level"+str(index)+"sinitems")})
+            #Fullfill multiple items' xpaths dictionary for different levels. 
             self.mul_targets_xpath.append({
                 itemdef :  { itemname : conf.get("level"+str(index)+"xpath",itemname).strip("\"").strip("\'") for itemname in eval(itemlist) } 
                     for itemdef,itemlist in conf.items("level"+str(index)+"mulitems")})
 
+            #Dynamicaly create scrapy item classes.
+            for itemdef,itemlist in conf.items("level"+str(index)+"sinitems"):
+                classname="level"+str(index)+itemdef
+                itemlist=eval(itemlist)
+                defdict={itemname:scrapy.Field() for itemname in itemlist}
+                globals()[classname]=type(classname,(scrapy.Item,),defdict)
+
+            for itemdef,itemlist in conf.items("level"+str(index)+"mulitems"):
+                classname="level"+str(index)+itemdef
+                itemlist=eval(itemlist)
+                defdict={itemname:scrapy.Field() for itemname in itemlist}
+                globals()[classname]=type(classname,(scrapy.Item,),defdict)
+
+
+
+            #Note that if we use [DEFAULT] to set the default value, them these key-value pairs will be return when you use 'items' method even if you set the sec argument for the section instead of DEFAULT. Therefore, before this rule being modified, we may just use has_option for expediency.
             if(conf.has_option("level"+str(index)+"xpath",'nextlink')):
                 self.next_link.append(conf.get("level"+str(index)+"xpath",'nextlink').strip("\"").strip("\'"))
             else:

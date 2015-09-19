@@ -18,9 +18,14 @@ class DBPipeline(object):
         for index in range(int(self.levels)):
             self.prefix.append({ itemdef:prefix.strip("\"").strip("\'") for itemdef,prefix in conf.items("level"+str(index)+"dbprefix")})
 
-        #self.conn = MySQLdb.Connect( user=conf.get('basic','dbuser'),  db=conf.get('basic','dbname'),passwd=conf.get('basic','dbpswd'),charset='utf8')
-        self.conn = MySQLdb.Connect( user="root",  db="test",charset='utf8')
+        #Configure and initinalize the database connection based on the config file.
+        confuser=conf.get('basic','dbuser').strip("\"").strip("\'")
+        confdb=conf.get('basic','dbname').strip("\"").strip("\'")
+        confpasswd=conf.get('basic','dbpswd').strip("\"").strip("\'")
+        self.conn = MySQLdb.Connect( user=confuser, passwd=confpasswd, db=confdb,charset='utf8')
         self.cursor=self.conn.cursor() 
+
+
         self.crawldate=time.strftime("%Y-%m-%d",time.localtime())
 
 
