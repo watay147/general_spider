@@ -69,6 +69,7 @@ class GeneralSpider(scrapy.Spider):
         self.mul_targets_xpath=[]
         self.next_link=[]
         self.source_link=[]
+        self.item_classes={}
 
         for index in range(int(self.levels)):
             #Fullfill function distionary for extracting different items.
@@ -89,13 +90,13 @@ class GeneralSpider(scrapy.Spider):
                 classname="level"+str(index)+itemdef
                 itemlist=eval(itemlist)
                 defdict={itemname:scrapy.Field() for itemname in itemlist}
-                globals()[classname]=type(classname,(scrapy.Item,),defdict)
+                self.item_classes[classname]=type(classname,(scrapy.Item,),defdict)
 
             for itemdef,itemlist in conf.items("level"+str(index)+"mulitems"):
                 classname="level"+str(index)+itemdef
                 itemlist=eval(itemlist)
                 defdict={itemname:scrapy.Field() for itemname in itemlist}
-                globals()[classname]=type(classname,(scrapy.Item,),defdict)
+                self.item_classes[classname]=type(classname,(scrapy.Item,),defdict)
 
 
 
@@ -122,7 +123,7 @@ class GeneralSpider(scrapy.Spider):
 
         #For single items, simply extract them into one pipeline object and yield it.
         for itemdef,xpaths in self.sin_targets_xpath[level].iteritems():
-            pipeobj=globals().get("level"+str(level)+itemdef)()
+            pipeobj=self.item_classes.get("level"+str(level)+itemdef)()
             for itemname,xpath in xpaths.iteritems():
                 itemcontent=self.func_dist[level][itemname](response.xpath(xpath).extract()[0])
                 pipeobj[itemname]=itemcontent
@@ -130,7 +131,7 @@ class GeneralSpider(scrapy.Spider):
 
         #For multiple items, use deques to save the extracted items with different itemnames in order and yield the pipeline object containing such deques. Extra works should be done to handle these in pipelines.py.
         for itemdef,xpaths in self.mul_targets_xpath[level].iteritems():
-            pipeobj=globals().get("level"+str(level)+itemdef)()
+            pipeobj=self.item_classes.get("level"+str(level)+itemdef)()
             for itemname,xpath in xpaths.iteritems():
                 pipeobj[itemname]=deque()
                 for item in response.xpath(xpath):
