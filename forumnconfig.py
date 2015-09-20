@@ -1,6 +1,6 @@
 [basic]
 urls=["http://guba.eastmoney.com/list,000415_739.html"]
-levels=2
+levels=1
 dbuser=root
 dbpswd=
 dbname=test
@@ -10,22 +10,24 @@ dbname=test
 
 
 [level0mulitems]
-item0=["title","articleid"]
-item1=["reply","click"]
+item0=["title","articleid","stockno"]
+#item1=["reply","click"]
 
 [level0dbprefix]
 item0="update"
-item1="update2"
+#item1="update2"
 
 [level0xpath]
+stockno=""
 title="//div[@class='articleh']/span[3]/a"
 articleid="//div[@class='articleh']/span[3]/a/@href"
 reply="//div[@class='articleh']/span[2]"
 click="//div[@class='articleh']/span[1]"
-nextlink="//span[@class='pagernums']/span/a[last()-1]"
-sourcelink="//div[@class='articleh']/span[3]/a"
+#nextlink="//span[@class='pagernums']/span/a[last()-1]"
+#sourcelink="//div[@class='articleh']/span[3]/a"
 
 [level0extract]
+stockno=extractstockno
 title=extracttext
 articleid=extracturlid
 reply=extractint

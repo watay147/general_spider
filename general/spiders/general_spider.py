@@ -29,6 +29,7 @@ import os
 import sys
 import ConfigParser
 import scrapy
+import threading
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
@@ -50,6 +51,8 @@ class GeneralSpider(scrapy.Spider):
         self.browser.implicitly_wait(60)
         self.max=3
         self.count=0
+        #Note that the browser may be used in different threads, therefore a lock is required to make sure each thread extracts proper items.
+        self.mutex=threading.Lock()
 
 
         #try to read the content from config files
@@ -125,19 +128,37 @@ class GeneralSpider(scrapy.Spider):
         for itemdef,xpaths in self.sin_targets_xpath[level].iteritems():
             pipeobj=self.item_classes.get("level"+str(level)+itemdef)()
             for itemname,xpath in xpaths.iteritems():
-                itemcontent=self.func_dist[level][itemname](response.xpath(xpath).extract()[0])
+                if xpath:
+                    itemcontent=self.func_dist[level][itemname](response.xpath(xpath).extract()[0])
+                else:
+                #Note: an empty xpath means extract the current url.
+                    itemcontent=self.func_dist[level][itemname](response.url)
                 pipeobj[itemname]=itemcontent
             yield pipeobj
 
         #For multiple items, use deques to save the extracted items with different itemnames in order and yield the pipeline object containing such deques. Extra works should be done to handle these in pipelines.py.
         for itemdef,xpaths in self.mul_targets_xpath[level].iteritems():
             pipeobj=self.item_classes.get("level"+str(level)+itemdef)()
+            urlextract=deque()#Store all the item names extracted by url.
+            xpathextract=""#Store any one item name extracted by xpath.
             for itemname,xpath in xpaths.iteritems():
-                pipeobj[itemname]=deque()
-                for item in response.xpath(xpath):
-                    itemcontent=self.func_dist[level][itemname](item.extract())
-                    pipeobj[itemname].append(itemcontent)
+                if xpath:
+                    xpathextract=itemname
+                    pipeobj[itemname]=deque()
+                    for item in response.xpath(xpath):
+                        itemcontent=self.func_dist[level][itemname](item.extract())
+                        pipeobj[itemname].append(itemcontent)
+                else:
+                #Note: an empty xpath means extract the current url. And since item extract from url is single, extra process is needed to transform it to be multiple.
+                    pipeobj[itemname]=[None]#Use list because of the convenience like [1]*2 makes [1,1]
+                    pipeobj[itemname][0]=self.func_dist[level][itemname](response.url)
+                    urlextract.append(itemname)
+            if xpathextract:
+                #If no any items extracted by xpath, then the transformation is needless.
+                for itemname in urlextract:
+                    pipeobj[itemname]=pipeobj[itemname]*len(pipeobj[xpathextract])
             yield pipeobj
+
 
         #Extract the source links to next level.
         if self.source_link[level]:
@@ -153,10 +174,15 @@ class GeneralSpider(scrapy.Spider):
                 yield scrapy.Request(nexturl, callback=self.parse,meta={'level':level})
             #If failed, use browser to extract instead.
             else:
-                self.browser.get(response.url)
-                links=self.browser.find_elements_by_xpath(self.next_link[level])
-                if links:
-                    nexturl=links[0].get_attribute("href")
-                    yield scrapy.Request(nexturl, callback=self.parse,meta={'level':level})
+                self.mutex.acquire()
+                try:
+                    self.browser.get(response.url)
+                    links=self.browser.find_elements_by_xpath(self.next_link[level])
+                    if links:
+                        nexturl=links[0].get_attribute("href")
+                        yield scrapy.Request(nexturl, callback=self.parse,meta={'level':level})
+                finally:
+                    #In order to make sure the mutex will be released, a try block is required.
+                    self.mutex.release()
 
         
