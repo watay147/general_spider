@@ -30,6 +30,7 @@ import sys
 import ConfigParser
 import scrapy
 import threading
+import logging
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
@@ -51,9 +52,13 @@ class GeneralSpider(scrapy.Spider):
         self.browser.implicitly_wait(60)
         self.max=3
         self.count=0
-        #Note that the browser may be used in different threads, therefore a lock is required to make sure each thread extracts proper items.
-        self.mutex=threading.Lock()
+        self.ff=open('log.txt','w')
 
+        
+        #Note that the browser may be used in different threads, therefore a lock is required to make sure each thread extracts proper items.
+        self.countmutex=threading.Lock()
+        self.mutex=threading.Lock()
+        self.shouldnext=threading.local()
 
         #try to read the content from config files
         self.conf=ConfigParser.ConfigParser()
@@ -67,6 +72,13 @@ class GeneralSpider(scrapy.Spider):
 
         self.start_urls=eval(conf.get('basic','urls'))
         self.levels=conf.get('basic','levels')
+        self.needbrowser=[False]*int(self.levels)#browser is needless by default
+        needbrowserlist=[]
+        if(conf.has_option("basic",'needbrowser')):
+            needbrowserlist=eval(conf.get('basic','needbrowser'))
+        for level in needbrowserlist:
+            self.needbrowser[int(level)]=True
+
         self.func_dist=[]
         self.sin_targets_xpath=[]
         self.mul_targets_xpath=[]
@@ -118,10 +130,56 @@ class GeneralSpider(scrapy.Spider):
 #The parser
     def parse(self, response):
         level=response.meta.get('level',0)
+        self.shouldnext.v=True
         if(level==0):
-            self.count+=1
-            if self.count>=self.max:
-                return 
+            with self.countmutex:
+                self.count+=1
+                #logging.debug(str(self.count)+','+response.url)
+                self.ff.write(str(self.count)+','+response.url+'\n')
+                self.ff.flush()
+                #if self.count>=4:
+                 #   self.shouldnext.v=False
+
+        extract_by_xpath=None
+        if self.needbrowser[level]:
+            self.mutex.acquire()
+            try:
+                self.browser.get(response.url)
+                #Use browser.page_source method directly won't arouse implicit waiting, therefore find_elements_by_xpath should be use previously to make sure the browser has wait until timeout or got the element.
+
+                #TODO: There may be a problem here: the browser query on a xpath for multiple items, but maybe only one of a part items have arrived instead of all the items, in this case the page_source would be incomplete so that extraction won't be complete, too.This problem lets me to use response.xpath for some extractions temporarily.....
+                
+
+                for itemdef,xpaths in self.sin_targets_xpath[level].iteritems():
+                    for itemname,xpath in xpaths.iteritems():
+                        if xpath:
+                            a=xpath.find('/@')
+                            if a==-1:
+                                a=len(xpath)
+                            self.browser.find_elements_by_xpath(xpath[:a])
+                for itemdef,xpaths in self.mul_targets_xpath[level].iteritems():
+                    for itemname,xpath in xpaths.iteritems():
+                        if xpath:
+                            a=xpath.find('/@')
+                            if a==-1:
+                                a=len(xpath)
+                            self.browser.find_elements_by_xpath(xpath[:a])
+                if self.source_link[level]:
+                    self.browser.find_elements_by_xpath(self.source_link[level])
+
+                if self.next_link[level]:
+                    self.browser.find_elements_by_xpath(self.next_link[level])
+                #Take advantages of scrapy's selector to provide the same APIs for extraction.
+                sel=scrapy.Selector(text=self.browser.page_source)
+                extract_by_xpath=sel.xpath
+            #except WebDriverException,e:
+              #  yield scrapy.Request(response.url, callback=self.parse,meta={'level':level})
+            finally:
+                self.mutex.release()
+        else:
+            extract_by_xpath=response.xpath
+
+
 
 
         #For single items, simply extract them into one pipeline object and yield it.
@@ -162,27 +220,19 @@ class GeneralSpider(scrapy.Spider):
 
         #Extract the source links to next level.
         if self.source_link[level]:
+            i=0
             for item in response.xpath(self.source_link[level]):
+                i+=1
                 full_url=response.urljoin(self.func_dist[level]['sourcelink'](item.extract()))
                 yield scrapy.Request(full_url,callback=self.parse,meta={'level':level+1})
+            self.ff.write(str(i)+'\n')
+            self.ff.flush()
 
         #Extract the link to next page in the same level.
-        if self.next_link[level]:
-            nexthref=response.xpath(self.next_link[level])
+        if self.shouldnext.v and self.next_link[level]:
+            nexthref=extract_by_xpath(self.next_link[level])
             if nexthref:
-                nexturl=self.func_dist[level]['nextlink'](nexthref.extract()[0])
+                nexturl=response.urljoin(self.func_dist[level]['nextlink'](nexthref.extract()[0]))
                 yield scrapy.Request(nexturl, callback=self.parse,meta={'level':level})
-            #If failed, use browser to extract instead.
-            else:
-                self.mutex.acquire()
-                try:
-                    self.browser.get(response.url)
-                    links=self.browser.find_elements_by_xpath(self.next_link[level])
-                    if links:
-                        nexturl=links[0].get_attribute("href")
-                        yield scrapy.Request(nexturl, callback=self.parse,meta={'level':level})
-                finally:
-                    #In order to make sure the mutex will be released, a try block is required.
-                    self.mutex.release()
 
         
