@@ -58,7 +58,7 @@ class GeneralSpider(scrapy.Spider):
         #Note that the browser may be used in different threads, therefore a lock is required to make sure each thread extracts proper items.
         self.countmutex=threading.Lock()
         self.mutex=threading.Lock()
-        self.shouldnext=threading.local()
+        self.thread_local=threading.local()
 
         #try to read the content from config files
         self.conf=ConfigParser.ConfigParser()
@@ -129,19 +129,19 @@ class GeneralSpider(scrapy.Spider):
 
 #The parser
     def parse(self, response):
-        level=response.meta.get('level',0)
-        self.shouldnext.v=True
-        if(level==0):
+        self.thread_local.level=response.meta.get('level',0)
+        self.thread_local.shouldnext=True
+        if(self.thread_local.level==0):
             with self.countmutex:
                 self.count+=1
                 #logging.debug(str(self.count)+','+response.url)
                 self.ff.write(str(self.count)+','+response.url+'\n')
                 self.ff.flush()
-                #if self.count>=4:
-                 #   self.shouldnext.v=False
+                if self.count>=3:
+                    self.thread_local.shouldnext=False
 
         extract_by_xpath=None
-        if self.needbrowser[level]:
+        if self.needbrowser[self.thread_local.level]:
             self.mutex.acquire()
             try:
                 self.browser.get(response.url)
@@ -150,25 +150,25 @@ class GeneralSpider(scrapy.Spider):
                 #TODO: There may be a problem here: the browser query on a xpath for multiple items, but maybe only one of a part items have arrived instead of all the items, in this case the page_source would be incomplete so that extraction won't be complete, too.This problem lets me to use response.xpath for some extractions temporarily.....
                 
 
-                for itemdef,xpaths in self.sin_targets_xpath[level].iteritems():
+                for itemdef,xpaths in self.sin_targets_xpath[self.thread_local.level].iteritems():
                     for itemname,xpath in xpaths.iteritems():
                         if xpath:
                             a=xpath.find('/@')
                             if a==-1:
                                 a=len(xpath)
                             self.browser.find_elements_by_xpath(xpath[:a])
-                for itemdef,xpaths in self.mul_targets_xpath[level].iteritems():
+                for itemdef,xpaths in self.mul_targets_xpath[self.thread_local.level].iteritems():
                     for itemname,xpath in xpaths.iteritems():
                         if xpath:
                             a=xpath.find('/@')
                             if a==-1:
                                 a=len(xpath)
                             self.browser.find_elements_by_xpath(xpath[:a])
-                if self.source_link[level]:
-                    self.browser.find_elements_by_xpath(self.source_link[level])
+                if self.source_link[self.thread_local.level]:
+                    self.browser.find_elements_by_xpath(self.source_link[self.thread_local.level])
 
-                if self.next_link[level]:
-                    self.browser.find_elements_by_xpath(self.next_link[level])
+                if self.next_link[self.thread_local.level]:
+                    self.browser.find_elements_by_xpath(self.next_link[self.thread_local.level])
                 #Take advantages of scrapy's selector to provide the same APIs for extraction.
                 sel=scrapy.Selector(text=self.browser.page_source)
                 extract_by_xpath=sel.xpath
@@ -183,20 +183,20 @@ class GeneralSpider(scrapy.Spider):
 
 
         #For single items, simply extract them into one pipeline object and yield it.
-        for itemdef,xpaths in self.sin_targets_xpath[level].iteritems():
-            pipeobj=self.item_classes.get("level"+str(level)+itemdef)()
+        for itemdef,xpaths in self.sin_targets_xpath[self.thread_local.level].iteritems():
+            pipeobj=self.item_classes.get("level"+str(self.thread_local.level)+itemdef)()
             for itemname,xpath in xpaths.iteritems():
                 if xpath:
-                    itemcontent=self.func_dist[level][itemname](response.xpath(xpath).extract()[0])
+                    itemcontent=self.func_dist[self.thread_local.level][itemname](response.xpath(xpath).extract()[0])
                 else:
                 #Note: an empty xpath means extract the current url.
-                    itemcontent=self.func_dist[level][itemname](response.url)
+                    itemcontent=self.func_dist[self.thread_local.level][itemname](response.url)
                 pipeobj[itemname]=itemcontent
             yield pipeobj
 
         #For multiple items, use deques to save the extracted items with different itemnames in order and yield the pipeline object containing such deques. Extra works should be done to handle these in pipelines.py.
-        for itemdef,xpaths in self.mul_targets_xpath[level].iteritems():
-            pipeobj=self.item_classes.get("level"+str(level)+itemdef)()
+        for itemdef,xpaths in self.mul_targets_xpath[self.thread_local.level].iteritems():
+            pipeobj=self.item_classes.get("level"+str(self.thread_local.level)+itemdef)()
             urlextract=deque()#Store all the item names extracted by url.
             xpathextract=""#Store any one item name extracted by xpath.
             for itemname,xpath in xpaths.iteritems():
@@ -204,12 +204,12 @@ class GeneralSpider(scrapy.Spider):
                     xpathextract=itemname
                     pipeobj[itemname]=deque()
                     for item in response.xpath(xpath):
-                        itemcontent=self.func_dist[level][itemname](item.extract())
+                        itemcontent=self.func_dist[self.thread_local.level][itemname](item.extract())
                         pipeobj[itemname].append(itemcontent)
                 else:
                 #Note: an empty xpath means extract the current url. And since item extract from url is single, extra process is needed to transform it to be multiple.
                     pipeobj[itemname]=[None]#Use list because of the convenience like [1]*2 makes [1,1]
-                    pipeobj[itemname][0]=self.func_dist[level][itemname](response.url)
+                    pipeobj[itemname][0]=self.func_dist[self.thread_local.level][itemname](response.url)
                     urlextract.append(itemname)
             if xpathextract:
                 #If no any items extracted by xpath, then the transformation is needless.
@@ -219,20 +219,20 @@ class GeneralSpider(scrapy.Spider):
 
 
         #Extract the source links to next level.
-        if self.source_link[level]:
+        if self.source_link[self.thread_local.level]:
             i=0
-            for item in response.xpath(self.source_link[level]):
+            for item in response.xpath(self.source_link[self.thread_local.level]):
                 i+=1
-                full_url=response.urljoin(self.func_dist[level]['sourcelink'](item.extract()))
-                yield scrapy.Request(full_url,callback=self.parse,meta={'level':level+1})
+                full_url=response.urljoin(self.func_dist[self.thread_local.level]['sourcelink'](item.extract()))
+                yield scrapy.Request(full_url,callback=self.parse,meta={'level':self.thread_local.level+1})
             self.ff.write(str(i)+'\n')
             self.ff.flush()
 
         #Extract the link to next page in the same level.
-        if self.shouldnext.v and self.next_link[level]:
-            nexthref=extract_by_xpath(self.next_link[level])
+        if self.thread_local.shouldnext and self.next_link[self.thread_local.level]:
+            nexthref=extract_by_xpath(self.next_link[self.thread_local.level])
             if nexthref:
-                nexturl=response.urljoin(self.func_dist[level]['nextlink'](nexthref.extract()[0]))
-                yield scrapy.Request(nexturl, callback=self.parse,meta={'level':level})
+                nexturl=response.urljoin(self.func_dist[self.thread_local.level]['nextlink'](nexthref.extract()[0]))
+                yield scrapy.Request(nexturl, callback=self.parse,meta={'level':self.thread_local.level})
 
         
