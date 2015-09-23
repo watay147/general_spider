@@ -1,6 +1,6 @@
 [basic]
 urls=["http://guba.eastmoney.com/list,000415_810.html"]
-levels=2
+levels=1
 needbrowser=[0]
 dbuser=root
 dbpswd=
@@ -18,6 +18,10 @@ item1=["reply","click"]
 item0="update"
 item1="update2"
 
+[level0dbsuffix]
+item0="stockno"
+
+
 [level0xpath]
 stockno=""
 title="//div[@class='articleh']/span[3]/a"
@@ -25,7 +29,7 @@ articleid="//div[@class='articleh']/span[3]/a/@href"
 reply="//div[@class='articleh']/span[2]"
 click="//div[@class='articleh']/span[1]"
 nextlink="//span[@class='pagernums']/span/a[last()-1]"
-sourcelink="//div[@class='articleh']/span[3]/a"
+#sourcelink="//div[@class='articleh']/span[3]/a"
 
 [level0extract]
 stockno=extractstockno

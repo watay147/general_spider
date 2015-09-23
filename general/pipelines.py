@@ -15,8 +15,18 @@ class DBPipeline(object):
         conf=spider.conf
         self.levels=spider.levels
         self.prefix=[]
+        self.suffix=[]
         for index in range(int(self.levels)):
             self.prefix.append({ itemdef:prefix.strip("\"").strip("\'") for itemdef,prefix in conf.items("level"+str(index)+"dbprefix")})
+            #dbsuffix is not necessary to be set explicitly. If it is not set, an empty dict is appended as a placeholder.
+            if conf.has_section("level"+str(index)+"dbsuffix"):
+                if conf.items("level"+str(index)+"dbsuffix"):
+                    self.suffix.append({ itemdef:suffix.strip("\"").strip("\'") for itemdef,suffix in conf.items("level"+str(index)+"dbsuffix")})
+                else:
+                    self.suffix.append({})
+            else:
+                 self.suffix.append({})
+
 
         #Configure and initinalize the database connection based on the config file.
         confuser=conf.get('basic','dbuser').strip("\"").strip("\'")
@@ -53,9 +63,13 @@ class DBPipeline(object):
         #Note that [] gets a list but () gets a generator
         itemtuple=(item[itemname] for itemname in itemnames)
         itemlist=zip(*itemtuple)
+        suffix=""
+        if itemdef in self.suffix[itemlevel]:
+                suffix=item[self.suffix[itemlevel][itemdef]][0]
+
         for instance in itemlist:
             #Use 'insert ignore' to handle duplicate items
-            querystring="insert ignore into `"+self.prefix[itemlevel][itemdef]+"`("+','.join(itemnames)+") value ("+','.join(("\'%s\'",)*len(itemnames))+")"
+            querystring="insert ignore into `"+self.prefix[itemlevel][itemdef]+suffix+"`("+','.join(itemnames)+") value ("+','.join(("\'%s\'",)*len(itemnames))+")"
             
             querystring=querystring % instance
             self.cursor.execute(querystring)
@@ -66,7 +80,11 @@ class DBPipeline(object):
         itemnames=spider.sin_targets_xpath[itemlevel][itemdef].keys()
         #Note that [] gets a list but () gets a generator
         instance=[item[itemname] for itemname in itemnames]
-        querystring="insert ignore into `"+self.prefix[itemlevel][itemdef]+"`("+','.join(itemnames)+") value ("+','.join(("\'%s\'",)*len(itemnames))+")" 
+        suffix=""
+        if itemdef in self.suffix[itemlevel]:
+            suffix=item[self.suffix[itemlevel][itemdef]]
+
+        querystring="insert ignore into `"+self.prefix[itemlevel][itemdef]+suffix+"`("+','.join(itemnames)+") value ("+','.join(("\'%s\'",)*len(itemnames))+")" 
         querystring=querystring % tuple(instance)
         self.cursor.execute(querystring)
         self.conn.commit()

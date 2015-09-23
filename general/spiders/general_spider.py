@@ -137,8 +137,8 @@ class GeneralSpider(scrapy.Spider):
                 #logging.debug(str(self.count)+','+response.url)
                 self.ff.write(str(self.count)+','+response.url+'\n')
                 self.ff.flush()
-                if self.count>=3:
-                    self.thread_local.shouldnext=False
+                #if self.count>=3:
+                 #   self.thread_local.shouldnext=False
 
         extract_by_xpath=None
         if self.needbrowser[self.thread_local.level]:
@@ -172,8 +172,11 @@ class GeneralSpider(scrapy.Spider):
                 #Take advantages of scrapy's selector to provide the same APIs for extraction.
                 sel=scrapy.Selector(text=self.browser.page_source)
                 extract_by_xpath=sel.xpath
-            #except WebDriverException,e:
-              #  yield scrapy.Request(response.url, callback=self.parse,meta={'level':level})
+            except Exception,e:
+                self.browser.close()
+                self.browser= webdriver.Remote("http://127.0.0.1:4800/wd/hub",desired_capabilities=DesiredCapabilities.HTMLUNIT)
+                self.browser.implicitly_wait(60)
+                yield scrapy.Request(response.url, callback=self.parse,meta={'level':self.thread_local.level})
             finally:
                 self.mutex.release()
         else:
