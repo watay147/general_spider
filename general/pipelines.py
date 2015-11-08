@@ -16,7 +16,7 @@ class DBPipeline(object):
         self.levels=spider.levels
         self.prefix=[]
         self.suffix=[]
-        for index in range(int(self.levels)):
+        for index in range(self.levels):
             self.prefix.append({ itemdef:prefix.strip("\"").strip("\'") for itemdef,prefix in conf.items("level"+str(index)+"dbprefix")})
             #dbsuffix is not necessary to be set explicitly. If it is not set, an empty dict is appended as a placeholder.
             if conf.has_section("level"+str(index)+"dbsuffix"):

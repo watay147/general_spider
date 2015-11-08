@@ -1,0 +1,4 @@
+- Execute the sql script in maketable.sql in a base of your database sortware (MySQL only for V0.1).
+- Read the config.py through. Edit the forumnconfig.py, replace the values of 'dbuser','dbpswd' and 'dbname' with correct values.
+- Replace ./config.py with the config.py in this folder.
+- Type python manage run to run the spider testing. 
